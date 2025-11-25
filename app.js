@@ -63,7 +63,7 @@ app.get('/', async (req, res) => {
             extractedArticlesCache = []; 
             
             // Process the first 5 articles
-            for (const item of feed.items.slice(0, 5)) {
+            for (const item of feed.items.slice(0, 10)) {
                 const articleContent = item.content || item.contentSnippet;
                 
                 // --- Feature Extraction ---
