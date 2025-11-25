@@ -1,0 +1,20 @@
+{
+  "name": "jobkiller",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "start": "node ./bin/www"
+  },
+  "dependencies": {
+    "@google/genai": "^1.30.0",
+    "cookie-parser": "~1.4.4",
+    "debug": "~2.6.9",
+    "dotenv": "^17.2.3",
+    "express": "^4.21.2",
+    "hbs": "^4.2.0",
+    "http-errors": "~1.6.3",
+    "morgan": "^1.10.1",
+    "openai": "^6.9.1",
+    "rss-parser": "^3.13.0"
+  }
+}

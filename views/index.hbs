@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>{{title}}</title>
+    <style>
+        body { font-family: sans-serif; max-width: 900px; margin: 0 auto; padding: 20px; }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .announcement-card { border: 1px solid #ccc; padding: 15px; margin-bottom: 20px; border-radius: 8px; }
+        .feature-list { list-style: none; padding: 0; }
+        .feature-list li { background: #f0f0f0; margin-bottom: 10px; padding: 10px; border-radius: 4px; }
+        .use-cases a { display: inline-block; background: #007bff; color: white; padding: 5px 10px; margin-right: 5px; text-decoration: none; border-radius: 3px; font-size: 0.9em; margin-bottom: 10px }
+        .provider-switch a { display: inline-block; padding: 8px 15px; border-radius: 5px; text-decoration: none; font-weight: bold; }
+        .provider-switch .active { background-color: #cc0000; color: white; border: 1px solid #cc0000; }
+        .provider-switch .inactive { background-color: #f8f8f8; color: #333; border: 1px solid #ccc; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Red Hat News and Feature Guides</h1>
+        <div class="provider-switch">
+            <strong>Current AI:</strong>
+            <a href="/?provider=gemini" class="{{#if_eq currentProvider 'gemini'}}active{{else}}inactive{{/if_eq}}">Gemini</a>
+            <a href="/?provider=openai" class="{{#if_eq currentProvider 'openai'}}active{{else}}inactive{{/if_eq}}">ChatGPT (OpenAI)</a>
+        </div>
+    </div>
+    
+    {{#if announcements}}
+        {{#each announcements as |article articleIndex|}}
+            <div class="announcement-card">
+                <h2>{{article.title}}</h2>
+                <p><em>Published: {{article.pubDate}}</em> | <a href="{{article.link}}" target="_blank">Original Article</a></p>
+
+                {{#if article.features}}
+                    <h3>Extracted Features/Updates:</h3>
+                    <ul class="feature-list">
+                        {{#each article.features as |feature featureIndex|}}
+                            <li>
+                                <h4>{{feature.featureName}}</h4>
+                                <p>{{feature.featureSummary}}</p>
+                                
+                                <div class="use-cases">
+                                    <strong>Generate Guide for Use Case (using {{currentProvider}}):</strong><br/>
+                                    {{#each feature.potentialUseCases as |useCase useCaseIndex|}}
+                                        <a href="/guide/{{articleIndex}}/{{featureIndex}}/{{useCaseIndex}}?provider={{currentProvider}}">
+                                            {{useCase}}
+                                        </a>
+                                    {{/each}}
+                                </div>
+                            </li>
+                        {{/each}}
+                    </ul>
+                {{else}}
+                    <p>No actionable technical features extracted from this article by {{currentProvider}}.</p>
+                {{/if}}
+            </div>
+        {{/each}}
+    {{else}}
+        <p>Could not load any announcements.</p>
+    {{/if}}
+
+
+    <div id="loading-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.8); color: white; z-index: 1000; text-align: center; padding-top: 20%;">
+        <div class="spinner" style="border: 8px solid #f3f3f3; border-top: 8px solid #cc0000; border-radius: 50%; width: 60px; height: 60px; animation: spin 2s linear infinite; margin: 0 auto 20px;"></div>
+        <p id="progress-message" style="font-size: 1.5em;"></p>
+        <style>
+            @keyframes spin {
+                0% { transform: rotate(0deg); }
+                100% { transform: rotate(360deg); }
+            }
+        </style>
+    </div>
+
+</body>
+<script>
+    const messages = [
+    "Organising 1's and 0's alphabetically...",
+    "Defragging my sandwich...",
+    "Reticulating splines...",
+    "Warming up the quantum entanglement device...",
+    "Consulting the Red Hat technical wizards...",
+    "Generating random non-sequiturs...",
+    "Polishing the HTML for optimal shine...",
+    "Debugging reality..."
+];
+
+const overlay = document.getElementById('loading-overlay');
+const messageElement = document.getElementById('progress-message');
+let intervalId;
+
+function cycleMessages() {
+    const randomIndex = Math.floor(Math.random() * messages.length);
+    messageElement.textContent = messages[randomIndex];
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    // Find all the "Generate Guide" links
+    const useCaseLinks = document.querySelectorAll('.use-cases a');
+
+    useCaseLinks.forEach(link => {
+        link.addEventListener('click', (event) => {
+            // 1. Prevent the default navigation for a moment
+            event.preventDefault(); 
+            
+            // 2. Capture the URL we were going to navigate to
+            const targetUrl = link.href;
+
+            // 3. Show the loading spinner and start message cycling
+            overlay.style.display = 'block';
+            cycleMessages(); // Show the first message immediately
+            intervalId = setInterval(cycleMessages, 2000); // Change message every 2 seconds
+
+            // 4. Wait a very brief moment, then navigate
+            // This small timeout ensures the browser has time to render the overlay
+            setTimeout(() => {
+                // Stop cycling messages and navigate
+                clearInterval(intervalId); 
+                window.location.href = targetUrl;
+            }, 100); 
+            // Note: The loading will persist until the server responds and the new page renders.
+        });
+    });
+});
+</script>
+</html>
