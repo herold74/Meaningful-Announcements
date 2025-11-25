@@ -10,7 +10,7 @@ const { extractFeatures, generateGuide } = require('./aiService');
 
 // --- Initialization ---
 const app = express();
-const port = 3000;
+const port = 8080;
 const rssParser = new RSSParser();
 
 // Use the main blog RSS feed

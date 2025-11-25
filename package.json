@@ -3,7 +3,8 @@
   "version": "0.0.0",
   "private": true,
   "scripts": {
-    "start": "node ./bin/www"
+    "start_old": "node ./bin/www",
+    "start": "node app.js"
   },
   "dependencies": {
     "@google/genai": "^1.30.0",
