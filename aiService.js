@@ -8,9 +8,16 @@ const https = require('https');
 const crypto = require('crypto');
 
 // --- Initialization ---
+
+// Ensure dotenv has run in index.js before this file is loaded
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+
 // Explicitly assign API keys from process.env (loaded by dotenv in index.js)
 const GEMINI_KEY = process.env.GEMINI_API_KEY;
 const OPENAI_KEY = process.env.OPENAI_API_KEY;
+
 
 if (!GEMINI_KEY || !OPENAI_KEY) {
     console.error("CRITICAL: One or both API keys are missing. Ensure GEMINI_API_KEY and OPENAI_API_KEY are set in your .env file.");
