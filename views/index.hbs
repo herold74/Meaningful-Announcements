@@ -8,13 +8,25 @@
         .announcement-card { border: 1px solid #ccc; padding: 15px; margin-bottom: 20px; border-radius: 8px; }
         .feature-list { list-style: none; padding: 0; }
         .feature-list li { background: #f0f0f0; margin-bottom: 10px; padding: 10px; border-radius: 4px; }
-        .use-cases a { display: inline-block; background: #007bff; color: white; padding: 5px 10px; margin-right: 5px; text-decoration: none; border-radius: 3px; font-size: 0.9em; margin-bottom: 10px }
+        .use-cases { margin-top: 10px; }
+        .use-cases a { display: inline-block; background: #007bff; color: white; padding: 5px 10px; margin-right: 5px; text-decoration: none; border-radius: 3px; font-size: 0.9em; margin-top: 5px; }
         .provider-switch a { display: inline-block; padding: 8px 15px; border-radius: 5px; text-decoration: none; font-weight: bold; }
         .provider-switch .active { background-color: #cc0000; color: white; border: 1px solid #cc0000; }
         .provider-switch .inactive { background-color: #f8f8f8; color: #333; border: 1px solid #ccc; }
+        .controls { display: flex; align-items: center; gap: 20px; margin-bottom: 20px; }
+        /* Spinner styles */
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
     </style>
 </head>
 <body>
+    <div id="loading-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.8); color: white; z-index: 1000; text-align: center; padding-top: 20%;">
+        <div class="spinner" style="border: 8px solid #f3f3f3; border-top: 8px solid #cc0000; border-radius: 50%; width: 60px; height: 60px; animation: spin 2s linear infinite; margin: 0 auto 20px;"></div>
+        <p id="progress-message" style="font-size: 1.5em;"></p>
+    </div>
+
     <div class="header">
         <h1>Red Hat News and Feature Guides</h1>
         <div class="provider-switch">
@@ -22,6 +34,21 @@
             <a href="/?provider=gemini" class="{{#if_eq currentProvider 'gemini'}}active{{else}}inactive{{/if_eq}}">Gemini</a>
             <a href="/?provider=openai" class="{{#if_eq currentProvider 'openai'}}active{{else}}inactive{{/if_eq}}">ChatGPT (OpenAI)</a>
         </div>
+    </div>
+    
+    <div class="controls">
+        <label for="industry-select">
+            <strong>Target Industry Vertical:</strong>
+        </label>
+        <select id="industry-select">
+            <option value="General Tech">General Tech</option>
+            <option value="Financial Services (Fintech)">Financial Services (Fintech)</option>
+            <option value="Healthcare and Pharmaceuticals">Healthcare and Pharmaceuticals</option>
+            <option value="Telecommunications">Telecommunications</option>
+            <option value="Retail and E-commerce">Retail and E-commerce</option>
+            <option value="Manufacturing and Automotive">Manufacturing and Automotive</option>
+            <option value="Government and Public Sector">Government and Public Sector</option>
+        </select>
     </div>
     
     {{#if announcements}}
@@ -39,11 +66,13 @@
                                 <p>{{feature.featureSummary}}</p>
                                 
                                 <div class="use-cases">
-                                    <strong>Generate Guide for Use Case (using {{currentProvider}}):</strong><br/>
+                                    <strong>Generate Guide for Use Case:</strong><br/>
                                     {{#each feature.potentialUseCases as |useCase useCaseIndex|}}
-                                        <a href="/guide/{{articleIndex}}/{{featureIndex}}/{{useCaseIndex}}?provider={{currentProvider}}">
+                                        <a href="/guide/{{articleIndex}}/{{featureIndex}}/{{useCaseIndex}}?provider={{currentProvider}}" 
+                                           class="use-case-link" 
+                                           data-base-href="/guide/{{articleIndex}}/{{featureIndex}}/{{useCaseIndex}}?provider={{currentProvider}}">
                                             {{useCase}}
-                                        </a>
+                                        </a><br/>
                                     {{/each}}
                                 </div>
                             </li>
@@ -57,68 +86,68 @@
     {{else}}
         <p>Could not load any announcements.</p>
     {{/if}}
-
-
-    <div id="loading-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.8); color: white; z-index: 1000; text-align: center; padding-top: 20%;">
-        <div class="spinner" style="border: 8px solid #f3f3f3; border-top: 8px solid #cc0000; border-radius: 50%; width: 60px; height: 60px; animation: spin 2s linear infinite; margin: 0 auto 20px;"></div>
-        <p id="progress-message" style="font-size: 1.5em;"></p>
-        <style>
-            @keyframes spin {
-                0% { transform: rotate(0deg); }
-                100% { transform: rotate(360deg); }
-            }
-        </style>
-    </div>
-
 </body>
 <script>
     const messages = [
-    "Organising 1's and 0's alphabetically...",
-    "Defragging my sandwich...",
-    "Reticulating splines...",
-    "Warming up the quantum entanglement device...",
-    "Consulting the Red Hat technical wizards...",
-    "Generating random non-sequiturs...",
-    "Polishing the HTML for optimal shine...",
-    "Debugging reality..."
-];
+        "Organising 1's and 0's alphabetically...",
+        "Defragging my sandwich...",
+        "Reticulating splines...",
+        "Warming up the quantum entanglement device...",
+        "Consulting the Red Hat technical wizards...",
+        "Generating random non-sequiturs...",
+        "Polishing the HTML for optimal shine...",
+        "Debugging reality..."
+    ];
 
-const overlay = document.getElementById('loading-overlay');
-const messageElement = document.getElementById('progress-message');
-let intervalId;
+    const overlay = document.getElementById('loading-overlay');
+    const messageElement = document.getElementById('progress-message');
+    const industrySelect = document.getElementById('industry-select');
+    let intervalId;
 
-function cycleMessages() {
-    const randomIndex = Math.floor(Math.random() * messages.length);
-    messageElement.textContent = messages[randomIndex];
-}
+    function cycleMessages() {
+        const randomIndex = Math.floor(Math.random() * messages.length);
+        messageElement.textContent = messages[randomIndex];
+    }
 
-document.addEventListener('DOMContentLoaded', () => {
-    // Find all the "Generate Guide" links
-    const useCaseLinks = document.querySelectorAll('.use-cases a');
+    document.addEventListener('DOMContentLoaded', () => {
+        const useCaseLinks = document.querySelectorAll('.use-case-link');
 
-    useCaseLinks.forEach(link => {
-        link.addEventListener('click', (event) => {
-            // 1. Prevent the default navigation for a moment
-            event.preventDefault(); 
-            
-            // 2. Capture the URL we were going to navigate to
-            const targetUrl = link.href;
+        // 1. Logic for handling link clicks
+        useCaseLinks.forEach(link => {
+            // Set the initial link target based on the selected industry (defaults to 'General Tech')
+            const baseHref = link.getAttribute('data-base-href');
+            let industry = industrySelect.value;
+            link.href = `${baseHref}&industry=${encodeURIComponent(industry)}`;
 
-            // 3. Show the loading spinner and start message cycling
-            overlay.style.display = 'block';
-            cycleMessages(); // Show the first message immediately
-            intervalId = setInterval(cycleMessages, 2000); // Change message every 2 seconds
+            link.addEventListener('click', (event) => {
+                event.preventDefault(); 
+                
+                // Get the final URL after the click
+                const targetUrl = link.href;
 
-            // 4. Wait a very brief moment, then navigate
-            // This small timeout ensures the browser has time to render the overlay
-            setTimeout(() => {
-                // Stop cycling messages and navigate
-                clearInterval(intervalId); 
-                window.location.href = targetUrl;
-            }, 100); 
-            // Note: The loading will persist until the server responds and the new page renders.
+                // Show the loading spinner and start message cycling
+                overlay.style.display = 'block';
+                cycleMessages(); 
+                intervalId = setInterval(cycleMessages, 2000); 
+
+                // Wait a brief moment, then navigate
+                setTimeout(() => {
+                    clearInterval(intervalId); 
+                    window.location.href = targetUrl;
+                }, 100); 
+            });
+        });
+
+        // 2. Logic for updating link targets when the dropdown changes
+        industrySelect.addEventListener('change', () => {
+            const newIndustry = industrySelect.value;
+            useCaseLinks.forEach(link => {
+                const baseHref = link.getAttribute('data-base-href');
+                // Re-write the link to include the new industry query parameter
+                link.href = `${baseHref}&industry=${encodeURIComponent(newIndustry)}`;
+            });
+            console.log(`Links updated for industry: ${newIndustry}`);
         });
     });
-});
 </script>
 </html>

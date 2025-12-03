@@ -4,8 +4,6 @@ const { GoogleGenerativeAI } = require("@google/generative-ai");
 const OpenAI = require("openai");
 const fs = require('fs');
 const path = require('path');
-const https = require('https');
-const crypto = require('crypto');
 const axios = require('axios');
 
 // --- Initialization ---
@@ -22,7 +20,6 @@ console.log('=====================');
 
 if (!GEMINI_KEY || !OPENAI_KEY) {
     console.error("CRITICAL: One or both API keys are missing. Ensure GEMINI_API_KEY and OPENAI_API_KEY are set in your .env file.");
-    // Optionally exit the process or throw an error here if keys are mandatory.
 }
 
 // Initialize AI clients
@@ -68,7 +65,6 @@ const CHATGPT_MODEL_GUIDE = "gpt-4o";
 
 // 1. Define the schema for a single Feature Object
 const featureObjectSchema = {
-// ... (Remains the same) ...
     type: "object",
     properties: {
         featureName: { type: "string", description: "A concise, descriptive title for the product update or feature." },
@@ -107,7 +103,6 @@ const openaiExtractionSchema = {
 // ------------------------------------------
 
 async function extractFeatures(articleText, provider = 'gemini') {
-// ... (Logic remains the same, using the explicitly initialized 'ai' and 'openai' objects) ...
     const prompt = `
         Analyze the following Red Hat news article. Your task is to extract all new product updates, technical features, or significant value-added stories.
         If the article is primarily corporate news, opinion, or non-technical, return an empty array (or a wrapper object with an empty array).
@@ -125,6 +120,10 @@ async function extractFeatures(articleText, provider = 'gemini') {
         let finalResult = [];
 
         if (provider === 'openai') {
+            if (!OPENAI_KEY || OPENAI_KEY === "YOUR_API_KEY_HERE"){
+                console.error("OPENAI_API_KEY is not set. Cannot perform extraction with OpenAI.");
+                return finalResult = {msg: "OPENAI_API_KEY not set"};
+            }
             const response = await openai.chat.completions.create({
                 model: CHATGPT_MODEL_EXTRACT,
                 messages: [{ role: "user", content: prompt }],
@@ -152,11 +151,17 @@ async function extractFeatures(articleText, provider = 'gemini') {
             
             const enhancedPrompt = prompt + "\n\nIMPORTANT: Return ONLY valid JSON array format, no other text.";
             
+            // Check if API key is set
+            if (!GEMINI_KEY || GEMINI_KEY === "YOUR_API_KEY_HERE"){
+                console.error("GEMINI_API_KEY is not set. Cannot perform extraction with Gemini.");
+                return [];
+            }
+            
             jsonText = await callGeminiV1API(GEMINI_MODEL_EXTRACT, enhancedPrompt, {
                 generationConfig: { temperature: 0.1 }
             });
             
-            console.log(`[DEBUG] Response received:`, !!jsonText);
+            console.log(`[DEBUG] Response received. Length:`, jsonText?.length || 0);
             
             // Clean and parse JSON
             jsonText = jsonText.trim().replace(/```json\n?/g, '').replace(/```\n?/g, '');
@@ -189,7 +194,7 @@ async function saveBase64Image(base64Data) {
 }
 
 // Helper to generate infographic HTML visualization
-async function generateInfographicHTML(feature, useCase) {
+async function generateInfographicHTML(feature, useCase, provider) {
     try {
         console.log("Generating business value infographic...");
         const prompt = `Create an HTML/CSS infographic visualization that shows the business value of "${feature.featureName}" for the use case: "${useCase}".
@@ -209,11 +214,30 @@ The infographic should be a complete HTML snippet (div with inline styles) that:
 
 Return ONLY the HTML div with inline styles, no explanations.`;
         
-        const htmlInfographic = await callGeminiV1API(GEMINI_MODEL_GUIDE, prompt, {
-            generationConfig: { temperature: 0.7 }
-        });
+        let response = null;
         
-        return htmlInfographic.replace(/```(html)?/g, '').trim();
+        // Use provider parameter to determine which AI to use
+        if (provider === 'openai') {
+            console.log("Generating infographic using OpenAI...");
+            response = await openai.chat.completions.create({
+                model: CHATGPT_MODEL_GUIDE,
+                messages: [{ role: "user", content: prompt }],
+                temperature: 0.7,
+            }).then(res => res.choices[0].message.content);
+        } else { // gemini - use v1 API
+            console.log("Generating infographic using Gemini v1 API...");
+            response = await callGeminiV1API(GEMINI_MODEL_GUIDE, prompt, {
+                generationConfig: { temperature: 0.7 }
+            });
+        }
+        
+        if (!response) {
+            console.error("No response received from infographic generation.");
+            return null;
+        }
+        
+        let htmlInfographic = response.replace(/```(html)?/g, '').trim();
+        return htmlInfographic;
 
     } catch (error) {
         console.error("Infographic Generation Error:", error);
@@ -225,27 +249,29 @@ Return ONLY the HTML div with inline styles, no explanations.`;
 // Guide Generation Wrapper
 // ------------------------------------------
 
-async function generateGuide(feature, useCase, provider = 'gemini') {
+async function generateGuide(feature, useCase, provider = 'gemini', industry = 'General Tech') {
+    
     const guidePrompt = `
-// ... (Prompt remains the same) ...
-        You are a technical writer. Write a comprehensive, step-by-step technical guide for a user.
-        The guide should focus on the new Red Hat feature: **${feature.featureName}** (Summary: ${feature.featureSummary}).
+        You are a technical writer. Write a comprehensive, step-by-step technical guide for a **technical user**.
+        The guide must focus on the new Red Hat feature: **${feature.featureName}** (Summary: ${feature.featureSummary}).
+        
         The entire guide must be contextualized around the following real-world scenario/use case: **${useCase}**.
 
         The guide must be returned as a complete HTML snippet (excluding <html>, <head>, and <body> tags, but including <h2>, <p>, <h3>, <ul>, and <code> tags).
         
-        IMPORTANT: Do NOT include any <h1> tags, images, or infographic content. The infographic will be added separately at the top of the page.
+        ***CRITICAL CONTEXT: The guide must be written specifically for a company operating within the ${industry} industry. Use relevant terminology, compliance considerations (if applicable), and examples typical of that industry.***
         
-        The guide should be professional, instructive, and include ONLY the following sections:
-        1. An introduction relating the feature to the use case.
-        2. Prerequisites (e.g., 'RHEL 9', 'OpenShift Cluster access').
-        3. A section of at least 3-10 actionable, technical steps/commands with brief explanations.
-        4. A conclusion on the value proposition.
+        The guide must be returned as a complete HTML snippet (excluding <html>, <head>, and <body> tags, but including <h1>, <p>, <h2>, <ul>, and <code> tags).
+        It should be professional, instructive, and include:
+        1. An introduction relating the feature to the use case in the context of the ${industry} industry.
+        2. Prerequisites (e.g., 'RHEL 9', 'OpenShift Cluster access', necessary toolchains, etc.).
+        3. A section of at least 3 actionable, technical steps/commands with brief explanations.
+        4. A conclusion on the value proposition for an ${industry} business.
     `;
 
     try {
         // Start infographic HTML generation in parallel with text generation
-        const infographicPromise = generateInfographicHTML(feature, useCase);
+        const infographicPromise = generateInfographicHTML(feature, useCase, provider);
         
         let textPromise;
         if (provider === 'openai') {
