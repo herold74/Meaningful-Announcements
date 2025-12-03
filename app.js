@@ -42,7 +42,8 @@ hbs.registerHelper('if_eq', function(a, b, opts) {
 function getProvider(req) {
     // Note: We'll use the provider from the query/cache, but this function
     // still determines the provider for the initial extraction run.
-    const provider = req.query.provider && req.query.provider.toLowerCase() === 'openai' ? 'openai' : 'gemini';
+    // const provider = req.query.provider && req.query.provider.toLowerCase() === 'openai' ? 'openai' : 'gemini';
+    const provider = 'openai'; // Default to OpenAI for all runs
     return provider;
 }
 
@@ -144,7 +145,9 @@ app.get('/guide/:articleIndex/:featureIndex/:useCaseIndex', async (req, res) => 
             useCase: useCase,
             guideHtml: guideHtml,
             currentProvider: generationProvider,
+            infographicHtml: guideData.infographicHtml,
             targetIndustry: industry // Pass to HBS for display if needed
+
         });
 
     } catch (error) {

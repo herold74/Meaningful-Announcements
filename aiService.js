@@ -2,8 +2,15 @@
 
 const { GoogleGenAI } = require("@google/genai");
 const OpenAI = require("openai");
+const fs = require('fs');
+const path = require('path');
 
 // --- Initialization ---
+
+// Ensure dotenv has run in index.js before this file is loaded
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
 
 // Explicitly assign API keys from process.env (loaded by dotenv in index.js)
 const GEMINI_KEY = process.env.GEMINI_API_KEY;
@@ -127,6 +134,58 @@ async function extractFeatures(articleText, provider = 'gemini') {
 }
 
 
+// Helper to download image from Base64 or URL (Imagen returns Base64 by default)
+async function saveBase64Image(base64Data) {
+    const fileName = `infographic-${Date.now()}-${Math.floor(Math.random() * 10000)}.png`;
+    const filePath = path.join(__dirname, 'public', 'images', 'generated', fileName);
+    
+    return new Promise((resolve, reject) => {
+        fs.writeFile(filePath, base64Data, 'base64', (err) => {
+            if (err) {
+                reject(err);
+            } else {
+                resolve(`/images/generated/${fileName}`);
+            }
+        });
+    });
+}
+
+// Helper to generate infographic HTML visualization
+async function generateInfographicHTML(feature, useCase) {
+    try {
+        console.log("Generating business value infographic...");
+        const prompt = `Create an HTML/CSS infographic visualization that shows the business value of "${feature.featureName}" for the use case: "${useCase}".
+
+The infographic should be a complete HTML snippet (div with inline styles) that:
+- Visualizes the transformation or business impact in a clear, professional way
+- Uses a modern, corporate design with Red Hat colors (red: #cc0000, blue: #0066cc, gray: #777)
+- Shows before/after comparison OR a flow diagram OR key metrics
+- Is visually striking and easy for salespeople to understand at a glance
+- Uses flexbox or grid for layout, boxes/cards for content
+- Includes icons represented by unicode symbols or colored boxes
+- Should be 100% width, max 600px height
+- IMPORTANT: Use box-sizing: border-box and max-width: 100% on all elements to prevent overflow
+- Use padding and margins in percentages or relative units (em, rem) not fixed pixels
+- Ensure all text is responsive and wraps properly
+- Set overflow: hidden or overflow: auto on container elements
+
+Return ONLY the HTML div with inline styles, no explanations.`;
+        
+        const response = await ai.models.generateContent({
+            model: GEMINI_MODEL_GUIDE,
+            contents: prompt,
+            config: { temperature: 0.7 }
+        });
+
+        let htmlInfographic = response.text.replace(/```(html)?/g, '').trim();
+        return htmlInfographic;
+
+    } catch (error) {
+        console.error("Infographic Generation Error:", error);
+        return null;
+    }
+}
+
 // ------------------------------------------
 // Guide Generation Wrapper
 // ------------------------------------------
@@ -138,6 +197,8 @@ async function generateGuide(feature, useCase, provider = 'gemini', industry = '
         The guide must focus on the new Red Hat feature: **${feature.featureName}** (Summary: ${feature.featureSummary}).
         
         The entire guide must be contextualized around the following real-world scenario/use case: **${useCase}**.
+
+        The guide must be returned as a complete HTML snippet (excluding <html>, <head>, and <body> tags, but including <h2>, <p>, <h3>, <ul>, and <code> tags).
         
         ***CRITICAL CONTEXT: The guide must be written specifically for a company operating within the ${industry} industry. Use relevant terminology, compliance considerations (if applicable), and examples typical of that industry.***
         
@@ -150,30 +211,54 @@ async function generateGuide(feature, useCase, provider = 'gemini', industry = '
     `;
 
     try {
-        let responseText;
-
+        // Start infographic HTML generation in parallel with text generation
+        const infographicPromise = generateInfographicHTML(feature, useCase);
+        
+        let textPromise;
         if (provider === 'openai') {
-            const response = await openai.chat.completions.create({
+            textPromise = openai.chat.completions.create({
                 model: CHATGPT_MODEL_GUIDE,
                 messages: [{ role: "user", content: guidePrompt }],
                 temperature: 0.7,
-            });
-            responseText = response.choices[0].message.content;
+            }).then(res => res.choices[0].message.content);
 
         } else { // 'gemini'
-            const response = await ai.models.generateContent({
+            textPromise = ai.models.generateContent({
                 model: GEMINI_MODEL_GUIDE,
                 contents: guidePrompt,
                 config: { temperature: 0.7 }
-            });
-            responseText = response.text;
+            }).then(res => res.text);
         }
 
-        return responseText.replace(/```(html)?/g, '').trim();
+        const [infographicResult, textResult] = await Promise.all([infographicPromise, textPromise]);
+
+        let html = textResult.replace(/```(html)?/g, '').trim();
+        
+        // Remove any infographic-related sections that the AI might have generated
+        // Match from "Infographic" heading to the next heading or end of content
+        html = html.replace(/<h[1-6][^>]*>.*?Infographic.*?<\/h[1-6]>[\s\S]*?(?=<h[1-6]|$)/gi, '');
+        html = html.replace(/<h[1-6][^>]*>.*?Business Value Visualization.*?<\/h[1-6]>[\s\S]*?(?=<h[1-6]|$)/gi, '');
+        
+        // Remove any standalone image tags that might have been generated
+        html = html.replace(/<img[^>]*>/gi, '');
+        
+        // Clean up multiple consecutive line breaks and empty elements
+        html = html.replace(/(<br\s*\/?>\s*){3,}/gi, '<br><br>');
+        html = html.replace(/<div[^>]*>\s*<\/div>/gi, '');
+        html = html.replace(/<section[^>]*>\s*<\/section>/gi, '');
+        html = html.trim();
+
+        return {
+            infographicHtml: infographicResult,
+            html: html
+        };
 
     } catch (error) {
         console.error(`[${provider.toUpperCase()}] API Guide Generation Error:`, error);
-        return "<h3>Error Generating Guide</h3><p>Could not generate the technical guide using the selected AI provider.</p>";
+        return {
+            infographicHtml: null,
+            html: "<h3>Error Generating Guide</h3><p>Could not generate the technical guide using the selected AI provider.</p>"
+        };
     }
 }
 

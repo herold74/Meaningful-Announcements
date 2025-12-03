@@ -18,6 +18,12 @@
         <p><strong>{{useCase}}</strong></p>
     </div>
 
+    {{#if infographicHtml}}
+    <div style="margin-bottom: 30px; max-width: 100%; overflow: hidden; border: 1px solid #ddd; border-radius: 5px; padding: 20px; background: #f9f9f9; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+        {{{infographicHtml}}}
+    </div>
+    {{/if}}
+
     {{{guideHtml}}}
 
     <hr>
