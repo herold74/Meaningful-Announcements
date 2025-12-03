@@ -1,37 +1,67 @@
 // aiService.js
 
-const { GoogleGenAI } = require("@google/genai");
+const { GoogleGenerativeAI } = require("@google/generative-ai");
 const OpenAI = require("openai");
 const fs = require('fs');
 const path = require('path');
 const https = require('https');
 const crypto = require('crypto');
+const axios = require('axios');
 
 // --- Initialization ---
-
-// Ensure dotenv has run in index.js before this file is loaded
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
-
 // Explicitly assign API keys from process.env (loaded by dotenv in index.js)
 const GEMINI_KEY = process.env.GEMINI_API_KEY;
 const OPENAI_KEY = process.env.OPENAI_API_KEY;
 
+console.log('=== API Key Debug ===');
+console.log('GEMINI_API_KEY exists:', !!GEMINI_KEY);
+console.log('GEMINI_API_KEY length:', GEMINI_KEY ? GEMINI_KEY.length : 0);
+console.log('GEMINI_API_KEY first 10 chars:', GEMINI_KEY ? GEMINI_KEY.substring(0, 10) : 'N/A');
+console.log('OPENAI_API_KEY exists:', !!OPENAI_KEY);
+console.log('=====================');
 
 if (!GEMINI_KEY || !OPENAI_KEY) {
     console.error("CRITICAL: One or both API keys are missing. Ensure GEMINI_API_KEY and OPENAI_API_KEY are set in your .env file.");
     // Optionally exit the process or throw an error here if keys are mandatory.
 }
 
-// Initialize AI clients, explicitly passing the key
-const ai = new GoogleGenAI({ apiKey: GEMINI_KEY }); // Explicit assignment
-const openai = new OpenAI({ apiKey: OPENAI_KEY });   // Explicit assignment
+// Initialize AI clients
+const genAI = new GoogleGenerativeAI(GEMINI_KEY);
+const openai = new OpenAI({ apiKey: OPENAI_KEY });
+
+// Helper function to call Gemini v1 API directly (bypassing SDK's v1beta)
+async function callGeminiV1API(model, prompt, config = {}) {
+    const url = `https://generativelanguage.googleapis.com/v1/models/${model}:generateContent`;
+    
+    const requestBody = {
+        contents: [{
+            parts: [{
+                text: prompt
+            }]
+        }]
+    };
+    
+    if (config.generationConfig) {
+        requestBody.generationConfig = config.generationConfig;
+    }
+    
+    try {
+        const response = await axios.post(`${url}?key=${GEMINI_KEY}`, requestBody, {
+            headers: { 'Content-Type': 'application/json' }
+        });
+        
+        return response.data.candidates[0].content.parts[0].text;
+    } catch (error) {
+        console.error('Gemini API Error:', error.response?.data || error.message);
+        throw error;
+    }
+}
 
 
-// --- Configuration (Remains the same) ---
+// --- Configuration ---
+// Using v1 API model names
 const GEMINI_MODEL_EXTRACT = "gemini-2.5-flash"; 
-const GEMINI_MODEL_GUIDE = "gemini-2.5-pro";    
+const GEMINI_MODEL_GUIDE = "gemini-2.5-flash"; // v1 might not have pro, using flash   
 const CHATGPT_MODEL_EXTRACT = "gpt-4o-mini";    
 const CHATGPT_MODEL_GUIDE = "gpt-4o";           
 
@@ -116,17 +146,20 @@ async function extractFeatures(articleText, provider = 'gemini') {
             const parsedObject = JSON.parse(jsonText);
             finalResult = parsedObject.extractedFeatures || [];
 
-        } else { // 'gemini'
-            const response = await ai.models.generateContent({
-                model: GEMINI_MODEL_EXTRACT,
-                contents: prompt,
-                config: {
-                    responseMimeType: "application/json",
-                    responseSchema: geminiExtractionSchema,
-                    temperature: 0.1,
-                },
+        } else { // 'gemini' - using v1 API directly
+            console.log(`[DEBUG] Calling Gemini v1 API with model: ${GEMINI_MODEL_EXTRACT}`);
+            console.log(`[DEBUG] API Key present: ${!!GEMINI_KEY}`);
+            
+            const enhancedPrompt = prompt + "\n\nIMPORTANT: Return ONLY valid JSON array format, no other text.";
+            
+            jsonText = await callGeminiV1API(GEMINI_MODEL_EXTRACT, enhancedPrompt, {
+                generationConfig: { temperature: 0.1 }
             });
-            jsonText = response.text.trim();
+            
+            console.log(`[DEBUG] Response received:`, !!jsonText);
+            
+            // Clean and parse JSON
+            jsonText = jsonText.trim().replace(/```json\n?/g, '').replace(/```\n?/g, '');
             finalResult = JSON.parse(jsonText);
         }
 
@@ -176,14 +209,11 @@ The infographic should be a complete HTML snippet (div with inline styles) that:
 
 Return ONLY the HTML div with inline styles, no explanations.`;
         
-        const response = await ai.models.generateContent({
-            model: GEMINI_MODEL_GUIDE,
-            contents: prompt,
-            config: { temperature: 0.7 }
+        const htmlInfographic = await callGeminiV1API(GEMINI_MODEL_GUIDE, prompt, {
+            generationConfig: { temperature: 0.7 }
         });
-
-        let htmlInfographic = response.text.replace(/```(html)?/g, '').trim();
-        return htmlInfographic;
+        
+        return htmlInfographic.replace(/```(html)?/g, '').trim();
 
     } catch (error) {
         console.error("Infographic Generation Error:", error);
@@ -225,15 +255,12 @@ async function generateGuide(feature, useCase, provider = 'gemini') {
                 temperature: 0.7,
             }).then(res => res.choices[0].message.content);
 
-        } else { // 'gemini'
-            textPromise = ai.models.generateContent({
-                model: GEMINI_MODEL_GUIDE,
-                contents: guidePrompt,
-                config: { temperature: 0.7 }
-            }).then(res => res.text);
+        } else { // 'gemini' - using v1 API
+            textPromise = callGeminiV1API(GEMINI_MODEL_GUIDE, guidePrompt, {
+                generationConfig: { temperature: 0.7 }
+            });
         }
 
-<<<<<<< HEAD
         const [infographicResult, textResult] = await Promise.all([infographicPromise, textPromise]);
 
         let html = textResult.replace(/```(html)?/g, '').trim();
@@ -256,9 +283,6 @@ async function generateGuide(feature, useCase, provider = 'gemini') {
             infographicHtml: infographicResult,
             html: html
         };
-=======
-        return responseText.replace(/```(html)?/g, '').trim();
->>>>>>> 9c694b60d0036a43e0dbf4a1eea622e03201f8a9
 
     } catch (error) {
         console.error(`[${provider.toUpperCase()}] API Guide Generation Error:`, error);
